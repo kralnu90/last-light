@@ -93,7 +93,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 
   <div class="overlay" id="intro">
     <h1>Last Light</h1>
-    <p>Keep the lamp burning from dusk till dawn. Every night the sea gets meaner. The lamp burns oil, monsters drop more, and by day you build the harbour town that keeps you alive.</p>
+    <p>Keep the lamp burning from dusk till dawn. Every night the sea gets meaner. The lamp burns oil, monsters drop more, and some leave gold chests or oil barrels behind: tap them to grab them. By day you build the harbour town that keeps you alive.</p>
     <div class="intro-btns"><button class="btn" id="begin" type="button">Take the keys</button><button id="install" type="button" hidden>Install app</button></div>
     <p id="iosTip" hidden>To install: tap Share, then Add to Home Screen.</p>
   </div>
@@ -112,10 +112,12 @@ const fmt=n=>{n=Math.floor(n);if(n<1000)return ''+n;const u=['k','m','b'];let i=
 
 // ---------- Save ----------
 const KEY='lastlight.v2';
-let save={night:1,best:0,coins:40,unlocked:3,plots:[null,null,null,null,null,null],seen:false};
+let save={night:1,best:0,coins:60,unlocked:4,plots:Array(9).fill(null),seen:false};
 try{const s=JSON.parse(localStorage.getItem(KEY));if(s)save=Object.assign(save,s);}catch(e){}
+while(save.plots.length<9)save.plots.push(null);
+save.unlocked=Math.max(4,save.unlocked);
 const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(save));}catch(e){}};
-const PLOT_COST=[0,0,0,120,350,900];
+const PLOT_COST=[0,0,0,0,80,180,350,650,1100];
 
 // ---------- Town buildings ----------
 const B={
@@ -127,9 +129,11 @@ const B={
   horn: {n:'Foghorn',       roof:'#9fb7d6',base:55,g:1.65,d:l=>l?`Slows the sea every ${hornIv(l).toFixed(0)}s`:'Blasts to slow all monsters'},
   fish: {n:'Fishery',       roof:'#6fb6c8',base:45,g:1.6, d:l=>`+${25*l} coins per night survived`},
   render:{n:'Rendering Hut',roof:'#d68a5c',base:40,g:1.6, d:l=>`Monsters drop +${30*l}% oil`},
+  market:{n:'Market',      roof:'#e8b64c',base:50,g:1.6, d:l=>`All coins earned +${25*l}%`},
 };
 const cannonIv=l=>Math.max(1.2,5/(1+0.25*(l-1)));
 const hornIv=l=>Math.max(5,14-l*1.5);
+const coinMult=()=>1+0.25*level('market');
 const level=t=>{const p=save.plots.find(p=>p&&p.b===t);return p?p.l:0;};
 const bcost=(t,l)=>Math.round(B[t].base*Math.pow(B[t].g,l)); // l = current level (0 = build)
 
@@ -146,7 +150,7 @@ let night=null, mode='town', speed=1, sel=null;
 function startNight(){
   const n=save.night;
   night={n,t:0,lamp:'steady',oil:0,maxOil:100+40*level('oil'),hp:0,maxHp:30*(1+0.4*level('mason')),
-    enemies:[],shots:[],balls:[],texts:[],rings:[],fireT:0,aim:-Math.PI/2,cannonT:2,hornT:hornIv(level('horn')||1),
+    enemies:[],shots:[],balls:[],texts:[],rings:[],drops:[],fireT:0,aim:-Math.PI/2,cannonT:2,hornT:hornIv(level('horn')||1),
     slowT:0,coins:0,kills:0,spawnT:0,spawned:0,total:28+n*7,boss:n%3===0,bossDone:false,over:false};
   night.oil=night.maxOil;night.hp=night.maxHp;
   mode='night';sel=null;renderAll();
@@ -155,10 +159,10 @@ const lampStats=()=>{const m=MODES[night.lamp];return{
   dmg:3*(1+0.35*level('lens'))*m.dmg, rate:1.2*(1+0.12*level('clock'))*m.rate, range:115*m.range, burn:m.burn};};
 
 const TYPES={
-  eel:  {hp:4, spd:26,dmg:1.2,coin:1,oil:2.2,r:7},
-  crab: {hp:14,spd:15,dmg:3,  coin:3,oil:4,  r:10},
-  jelly:{hp:3, spd:46,dmg:1,  coin:2,oil:1.5,r:6},
-  kraken:{hp:180,spd:9,dmg:12,coin:60,oil:40,r:22},
+  eel:  {hp:4, spd:26,dmg:1.2,coin:2,oil:2.2,r:7},
+  crab: {hp:14,spd:15,dmg:3,  coin:5,oil:4,  r:10},
+  jelly:{hp:3, spd:46,dmg:1,  coin:3,oil:1.5,r:6},
+  kraken:{hp:180,spd:9,dmg:12,coin:120,oil:40,r:22},
 };
 let W=0,H=0,S=1,OX=0,OY=0,DPR=1;
 function spawn(type){
@@ -172,7 +176,7 @@ function pick(){const n=night.n,r=Math.random(),p=night.t/NIGHT_LEN;
   if(n>=2&&r<0.18+p*0.1)return 'jelly'; if(n>=1&&r<0.38+p*0.15&&p>0.25)return 'crab'; return 'eel';}
 
 // plot positions on the coast (world units; lighthouse at 0,0, cliff edge at y=38)
-const PLOT_POS=[[-118,70],[-70,62],[-24,74],[24,74],[70,62],[118,70]];
+const PLOT_POS=[[-120,62],[-60,70],[0,76],[60,70],[120,62],[-90,112],[-30,118],[30,118],[90,112]];
 
 function step(dt){
   const N=night,L=lampStats();
@@ -229,16 +233,27 @@ function step(dt){
   N.enemies=N.enemies.filter(e=>e.hp>0);
   for(const r of N.rings){r.life-=dt;r.r+=dt*(r.boom?80:220);}
   N.rings=N.rings.filter(r=>r.life>0);
+  for(const d of N.drops){d.age+=dt;if(d.age>3){const r=Math.hypot(d.x,d.y);if(r<22)collect(d);else{d.x-=d.x/r*30*dt;d.y-=d.y/r*30*dt;}}}
+  N.drops=N.drops.filter(d=>!d.got);
   for(const t of N.texts){t.y-=16*dt;t.life-=dt;}
   N.texts=N.texts.filter(t=>t.life>0);
   if(N.hp<=0)finish(false);else if(N.t>=NIGHT_LEN)finish(true);
 }
 function kill(e){
   if(e.dead)return;e.dead=true;const N=night;
-  N.coins+=e.coin;N.kills++;
+  N.coins+=e.coin*coinMult();N.kills++;
   const o=e.oil*(1+0.3*level('render'));N.oil=Math.min(N.maxOil,N.oil+o);
-  if(e.type==='kraken')text(e.x,e.y,'Kraken driven off!','#c9a0ff',2);
-  else if(Math.random()<.3)text(e.x,e.y,'+'+o.toFixed(0)+' oil','#8fd18a',1);
+  if(e.type==='kraken'){text(e.x,e.y,'Kraken driven off!','#c9a0ff',2);
+    for(let i=0;i<3;i++)N.drops.push({kind:'gold',x:e.x+(i-1)*14,y:e.y,age:0,val:e.coin*2});}
+  else if(Math.random()<0.12){
+    const gold=Math.random()<0.55;
+    N.drops.push(gold?{kind:'gold',x:e.x,y:e.y,age:0,val:e.coin*8+5*N.n}:{kind:'oil',x:e.x,y:e.y,age:0,val:18+N.maxOil*0.08});
+  }
+}
+function collect(d){
+  if(d.got)return;d.got=true;const N=night;
+  if(d.kind==='gold'){const c=d.val*coinMult();N.coins+=c;text(d.x,d.y,'+'+fmt(c)+' coins','#f0d27a',1.2);}
+  else{N.oil=Math.min(N.maxOil,N.oil+d.val);text(d.x,d.y,'+'+Math.round(d.val)+' oil','#8fd18a',1.2);}
 }
 function text(x,y,s,c,life){night.texts.push({x,y,s,c,life});}
 const posOf=t=>{const i=save.plots.findIndex(p=>p&&p.b===t);return i<0?[0,60]:PLOT_POS[i];};
@@ -246,7 +261,7 @@ const cannonPos=()=>posOf('cannon'), hornPos=()=>posOf('horn');
 
 function finish(won){
   const N=night;if(N.over)return;N.over=true;
-  const fish=won?25*level('fish')*N.n:0, dawn=won?15+N.n*10:0;
+  const fish=won?Math.round(25*level('fish')*N.n*coinMult()):0, dawn=won?Math.round((30+N.n*15)*coinMult()):0;
   let earned=N.coins+fish+dawn; if(!won)earned=Math.floor(earned*0.5);
   save.coins+=earned;
   if(won){save.best=Math.max(save.best,N.n);save.night++;}
@@ -264,7 +279,7 @@ function finish(won){
 // ---------- Rendering ----------
 const cv=$('cv'),ctx=cv.getContext('2d'),sea=$('sea');
 function resize(){DPR=Math.min(2,devicePixelRatio||1);W=sea.clientWidth;H=sea.clientHeight;cv.width=W*DPR;cv.height=H*DPR;
-  S=Math.min(W/300,H/250);OX=W/2;OY=H*0.6;}
+  S=Math.min(W/300,H/270);OX=W/2;OY=H*0.54;}
 new ResizeObserver(resize).observe(sea);resize();
 const lerp=(a,b,t)=>a+(b-a)*t;
 function mix(c1,c2,t){const p=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));const a=p(c1),b=p(c2);return `rgb(${a.map((v,i)=>Math.round(lerp(v,b[i],t))).join(',')})`;}
@@ -287,7 +302,7 @@ function draw(){
   ctx.fillStyle=l1;ctx.beginPath();ctx.moveTo(-220,48);
   for(let x=-220;x<=220;x+=20)ctx.lineTo(x,40+Math.sin(x*0.05)*5+Math.cos(x*0.13)*3);
   ctx.lineTo(220,300);ctx.lineTo(-220,300);ctx.closePath();ctx.fill();
-  ctx.fillStyle=l2;ctx.fillRect(-220,96,440,300);
+  ctx.fillStyle=l2;ctx.fillRect(-220,92,440,300);
   ctx.strokeStyle='rgba(214,233,234,0.25)';ctx.lineWidth=1.5;ctx.beginPath();
   for(let x=-220;x<=220;x+=20){const y=40+Math.sin(x*0.05)*5+Math.cos(x*0.13)*3;x===-220?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();
   // plots / buildings
@@ -304,6 +319,10 @@ function draw(){
     for(const r of N.rings){ctx.strokeStyle=r.boom?`rgba(255,160,90,${r.life*2})`:`rgba(159,183,214,${r.life*0.7})`;ctx.lineWidth=r.boom?3:2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
     for(const e of N.enemies)drawEnemy(e,N.slowT>0);
     for(const s of N.shots){ctx.fillStyle='#ffc457';ctx.beginPath();ctx.arc(s.x,s.y,2.2,0,7);ctx.fill();}
+    for(const d of N.drops){const by=d.y+Math.sin(clockT*3+d.x)*1.5;
+      if(d.kind==='gold'){ctx.fillStyle='#8a6a1e';ctx.fillRect(d.x-6,by-3,12,8);ctx.fillStyle='#f0d27a';ctx.fillRect(d.x-6,by-6,12,4);ctx.fillStyle='#fff3c4';ctx.fillRect(d.x-1.2,by-3,2.4,3);}
+      else{ctx.fillStyle='#3f7a3c';ctx.fillRect(d.x-4.5,by-6,9,12);ctx.fillStyle='#8fd18a';ctx.fillRect(d.x-4.5,by-3,9,1.5);ctx.fillRect(d.x-4.5,by+2,9,1.5);}
+      ctx.strokeStyle=`rgba(255,255,255,${0.3+0.25*Math.sin(clockT*5)})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(d.x,by,10,0,7);ctx.stroke();}
     for(const b of N.balls){const h=Math.sin(b.t*Math.PI)*22;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(b.x,b.y,2.5,0,7);ctx.fill();ctx.fillStyle='#2a2a2a';ctx.beginPath();ctx.arc(b.x,b.y-h,3.2,0,7);ctx.fill();}
   }
   drawLighthouse(mode!=='night'||night.oil>0);
@@ -354,8 +373,10 @@ function drawEnemy(e,slowed){
   if(e.hp<e.maxHp){const w=e.r*2;ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-w/2,e.y-e.r-6,w,2.5);ctx.fillStyle='#e25d4a';ctx.fillRect(e.x-w/2,e.y-e.r-6,w*Math.max(0,e.hp/e.maxHp),2.5);}
 }
 cv.addEventListener('click',ev=>{
-  if(mode!=='town')return;const r=cv.getBoundingClientRect();
+  const r=cv.getBoundingClientRect();
   const x=(ev.clientX-r.left-OX)/S,y=(ev.clientY-r.top-OY)/S;
+  if(mode==='night'&&night&&!night.over){for(const d of night.drops)if(Math.hypot(d.x-x,d.y-y)<18)collect(d);return;}
+  if(mode!=='town')return;
   PLOT_POS.forEach((p,i)=>{if(Math.abs(x-p[0])<20&&Math.abs(y-p[1])<20){sel=i;renderPane();}});
 });
 

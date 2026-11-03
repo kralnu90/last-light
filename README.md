@@ -7,8 +7,8 @@ A lighthouse keeper's idle defence game for your phone. Keep the lamp burning fr
 ## How it plays
 
 - **One night per run.** Survive from dusk to dawn to move on to a harder night. Every third night, something big comes up from the deep.
-- **Oil.** The lamp burns oil and monsters drop more. Set the lamp to Dim, Steady or Blaze to trade power against how long your oil lasts.
-- **The town.** Build and upgrade on the cliffs between nights: oil stores, lens grinders, a cannon battery, a foghorn, a fishery and more. There are more buildings than plots, so choose wisely.
+- **Oil and loot.** The lamp burns oil and monsters drop more. Some leave gold chests or oil barrels behind: tap them to grab them, or they drift in to the lighthouse. Set the lamp to Dim, Steady or Blaze to trade power against how long your oil lasts.
+- **The town.** Build and upgrade on the cliffs between nights: oil stores, lens grinders, a market, a cannon battery, a foghorn, a fishery and more. Clear extra land to grow the town up to nine plots, but there are more buildings than plots, so choose wisely.
 
 ## Install
 
