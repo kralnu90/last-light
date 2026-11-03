@@ -73,6 +73,12 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .tally div{display:flex;justify-content:space-between;gap:20px;font-size:.88rem;color:var(--muted)}
 .tally div b{color:var(--foam)} .tally .tot{border-top:1px solid var(--edge);padding-top:6px;margin-top:2px}
 .tally .tot b{color:var(--coin);font-size:1.05rem}
+.reset{margin-top:6px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.reset p{margin:0;font-size:.8rem;color:var(--muted);max-width:34ch;line-height:1.4}
+.reset-btns{display:flex;gap:16px;align-items:center}
+.danger{background:var(--hull);color:#fff;border:0;border-radius:6px;font:700 .8rem var(--ui);letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;cursor:pointer}
+.danger:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+.reset .back{align-self:center}
 #install{background:transparent;color:var(--lamp);border:2px solid var(--lamp);border-radius:8px;font:700 .9rem var(--ui);letter-spacing:.06em;text-transform:uppercase;padding:10px 22px;cursor:pointer}
 #install:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
 .intro-btns{display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -112,7 +118,8 @@ const fmt=n=>{n=Math.floor(n);if(n<1000)return ''+n;const u=['k','m','b'];let i=
 
 // ---------- Save ----------
 const KEY='lastlight.v2';
-let save={night:1,best:0,coins:60,unlocked:4,plots:Array(9).fill(null),seen:false};
+const freshSave=()=>({night:1,best:0,coins:60,unlocked:4,plots:Array(9).fill(null),seen:false});
+let save=freshSave();
 try{const s=JSON.parse(localStorage.getItem(KEY));if(s)save=Object.assign(save,s);}catch(e){}
 while(save.plots.length<9)save.plots.push(null);
 save.unlocked=Math.max(4,save.unlocked);
@@ -428,8 +435,15 @@ function renderPane(){
     pane.innerHTML=`<div class="label">The town · tap a plot</div><div class="plots">${save.plots.map((p,i)=>{
       if(i>=save.unlocked)return `<button class="plot locked" type="button" data-i="${i}"><span class="n">Clear land</span><span class="v">${PLOT_COST[i]} coins</span></button>`;
       if(!p)return `<button class="plot empty" type="button" data-i="${i}"><span class="n">+ Build</span></button>`;
-      return `<button class="plot" type="button" data-i="${i}"><span class="n">${B[p.b].n}</span><span class="v">Level ${p.l}</span></button>`;}).join('')}</div>`;
+      return `<button class="plot" type="button" data-i="${i}"><span class="n">${B[p.b].n}</span><span class="v">Level ${p.l}</span></button>`;}).join('')}</div>
+      <div class="reset" id="reset"><button class="back" type="button" id="resetAsk">Start over</button></div>`;
     pane.querySelector('.plots').onclick=e=>{const b=e.target.closest('.plot');if(b){sel=+b.dataset.i;renderPane();}};
+    $('resetAsk').onclick=()=>{
+      $('reset').innerHTML=`<p>Tear down the town, lose your coins and go back to night 1? Best night (${save.best}) is kept.</p>
+        <div class="reset-btns"><button class="danger" type="button" id="resetYes">Yes, start over</button><button class="back" type="button" id="resetNo">Keep playing</button></div>`;
+      $('resetNo').onclick=()=>renderPane();
+      $('resetYes').onclick=()=>{const best=save.best;save=freshSave();save.best=best;persist();sel=null;renderAll();$('intro').hidden=false;};
+    };
     return;
   }
   const i=sel,p=save.plots[i];
