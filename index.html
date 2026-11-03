@@ -79,6 +79,15 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .danger{background:var(--hull);color:#fff;border:0;border-radius:6px;font:700 .8rem var(--ui);letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;cursor:pointer}
 .danger:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
 .reset .back{align-self:center}
+.banner{background:rgba(143,209,138,.12);border:1px solid rgba(143,209,138,.4);border-radius:8px;padding:8px 10px;font-size:.8rem;color:var(--oil)}
+.banner b{color:var(--foam)}
+.hint{margin:0;font-size:.76rem;color:var(--muted);line-height:1.4}
+.tier{font-weight:600;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-left:4px}
+.rnow{background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.rrow{display:flex;justify-content:space-between;gap:10px;font-size:.84rem;font-variant-numeric:tabular-nums}
+.rrow span{color:var(--lamp);font-weight:700}
+.rbar{height:6px;background:var(--swell);border-radius:3px;overflow:hidden}
+.rbar i{display:block;height:100%;background:var(--lamp)}
 #install{background:transparent;color:var(--lamp);border:2px solid var(--lamp);border-radius:8px;font:700 .9rem var(--ui);letter-spacing:.06em;text-transform:uppercase;padding:10px 22px;cursor:pointer}
 #install:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
 .intro-btns{display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -118,11 +127,13 @@ const fmt=n=>{n=Math.floor(n);if(n<1000)return ''+n;const u=['k','m','b'];let i=
 
 // ---------- Save ----------
 const KEY='lastlight.v2';
-const freshSave=()=>({night:1,best:0,coins:60,unlocked:4,plots:Array(9).fill(null),seen:false});
+const freshSave=()=>({night:1,best:0,coins:60,unlocked:4,plots:Array(9).fill(null),seen:false,rig:0,research:null,researched:['oil','lens','mason','fish']});
 let save=freshSave();
 try{const s=JSON.parse(localStorage.getItem(KEY));if(s)save=Object.assign(save,s);}catch(e){}
 while(save.plots.length<9)save.plots.push(null);
 save.unlocked=Math.max(4,save.unlocked);
+if(!save.researched)save.researched=[...new Set(['oil','lens','mason','fish',...save.plots.filter(Boolean).map(p=>p.b)])];
+if(save.rig==null)save.rig=0;if(save.research===undefined)save.research=null;
 const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(save));}catch(e){}};
 const PLOT_COST=[0,0,0,0,150,400,900,1800,3500];
 
@@ -136,10 +147,35 @@ const B={
   horn: {n:'Foghorn',       roof:'#9fb7d6',base:80,g:1.85,d:l=>l?`Slows the sea every ${hornIv(l).toFixed(0)}s`:'Blasts to slow all monsters'},
   fish: {n:'Fishery',       roof:'#6fb6c8',base:70,g:1.8, d:l=>`+${20*l} coins per night survived`},
   render:{n:'Rendering Hut',roof:'#d68a5c',base:60,g:1.8, d:l=>`Monsters drop +${20*l}% oil`},
+  harpoon:{n:'Harpoon Tower',roof:'#5d7f95',base:120,g:1.85,d:l=>`Harpoon every ${harpoonIv(l).toFixed(1)}s, one huge hit`},
+  lifeboat:{n:'Lifeboat Station',roof:'#e07a3c',base:110,g:1.85,d:l=>`Fetches loot in ${lifeIv(l).toFixed(1)}s, +${l}% loot chance`},
+  tar:{n:'Tar Works',roof:'#55504a',base:120,g:1.85,d:l=>`Tar slick slows monsters ${Math.round(tarSlow(l)*100)}%`},
+  flare:{n:'Flare Tower',roof:'#ff8a5c',base:140,g:1.9,d:l=>`Stuns a patch of sea every ${flareIv(l).toFixed(0)}s`},
   market:{n:'Market',      roof:'#e8b64c',base:80,g:1.8, d:l=>`All coins earned +${15*l}%`},
   watch:{n:'Watchtower',   roof:'#7d8fa6',base:70,g:1.8, d:l=>`Lamp reach +${8*l}%`},
   cottage:{n:'Keeper\u2019s Cottage',roof:'#a8c08a',base:60,g:1.8,d:l=>`Walls repair ${(0.4*l).toFixed(1)} hp/s`},
 };
+const harpoonIv=l=>Math.max(1,3.5/(1+0.2*(l-1)));
+const lifeIv=l=>Math.max(0.4,2.4-0.4*l);
+const tarSlow=l=>Math.min(0.7,0.2+0.06*l);
+const flareIv=l=>Math.max(6,16-l*1.5);
+// ---------- Offshore rig research ----------
+const RIG=[118,-128];
+const RIG_COST=[150,600,1800,4000,8000]; // cost to reach level 1..5
+const RIG_TIER=l=>Math.min(3,l);
+const RESEARCH={clock:{tier:1,min:2},market:{tier:1,min:3},render:{tier:1,min:3},
+  cannon:{tier:2,min:8},watch:{tier:2,min:8},cottage:{tier:2,min:10},horn:{tier:2,min:10},
+  harpoon:{tier:3,min:25},lifeboat:{tier:3,min:25},tar:{tier:3,min:30},flare:{tier:3,min:40}};
+const R_COST=[0,60,200,500];
+const rTime=id=>RESEARCH[id].min*60000*(1-0.15*(save.rig-1));
+const fmtTime=ms=>{const t=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(t/3600),m=Math.floor(t%3600/60),sx=t%60;return h?`${h}h ${m}m`:m?`${m}m ${sx}s`:`${sx}s`;};
+let rDone=null;
+function checkResearch(){
+  if(save.research&&Date.now()>=save.research.ends){
+    const id=save.research.id;if(!save.researched.includes(id))save.researched.push(id);
+    save.research=null;rDone=id;persist();return true;}
+  return false;
+}
 const cannonIv=l=>Math.max(1.2,5/(1+0.25*(l-1)));
 const hornIv=l=>Math.max(5,14-l*1.5);
 const coinMult=()=>1+0.15*level('market');
@@ -159,7 +195,7 @@ let night=null, mode='town', speed=1, sel=null;
 function startNight(){
   const n=save.night;
   night={n,t:0,lamp:'steady',oil:0,maxOil:100+25*level('oil'),hp:0,maxHp:30*(1+0.4*level('mason')),
-    enemies:[],shots:[],balls:[],texts:[],rings:[],drops:[],fireT:0,aim:-Math.PI/2,cannonT:2,hornT:hornIv(level('horn')||1),
+    enemies:[],shots:[],balls:[],texts:[],rings:[],drops:[],lines:[],harpoonT:2,flareT:6,fireT:0,aim:-Math.PI/2,cannonT:2,hornT:hornIv(level('horn')||1),
     slowT:0,coins:0,kills:0,spawnT:0,spawned:0,total:30+n*8,boss:n%3===0,bossDone:false,over:false};
   night.oil=night.maxOil;night.hp=night.maxHp;
   mode='night';sel=null;renderAll();
@@ -206,12 +242,14 @@ function step(dt){
   const hl=level('horn');
   if(hl){N.hornT-=dt;if(N.hornT<=0){N.hornT=hornIv(hl);N.slowT=2.5+hl*0.4;N.rings.push({x:hornPos()[0],y:hornPos()[1],r:0,life:1});}}
   N.slowT=Math.max(0,N.slowT-dt);
-  const slow=N.slowT>0?0.4:1;
+  const slow=N.slowT>0?0.4:1, tl=level('tar');
   // enemies
   for(const e of N.enemies){
     e.ph+=dt*4;e.hit=Math.max(0,e.hit-dt);
     const d=Math.hypot(e.x,e.y),stop=18+e.r;
-    if(d>stop){const m=Math.min(e.spd*slow*dt,d-stop);e.x-=e.x/d*m;e.y-=e.y/d*m;}
+    if(e.stunT>0){e.stunT-=dt;continue;}
+    const tar=tl&&d>40&&d<80?1-tarSlow(tl):1;
+    if(d>stop){const m=Math.min(e.spd*slow*tar*dt,d-stop);e.x-=e.x/d*m;e.y-=e.y/d*m;}
     else{e.atkT-=dt;if(e.atkT<=0){e.atkT=1.1;N.hp-=e.dmg;}}
   }
   // lamp fire
@@ -241,10 +279,25 @@ function step(dt){
     if(b.t>=1){b.done=true;N.rings.push({x:b.tx,y:b.ty,r:0,life:.5,boom:1});
       for(const e of N.enemies)if(e.hp>0&&Math.hypot(e.x-b.tx,e.y-b.ty)<26+e.r){e.hp-=b.dmg;e.hit=.15;if(e.hp<=0)kill(e);}}}
   N.balls=N.balls.filter(b=>!b.done);
+  // harpoon tower
+  const hp_=level('harpoon');
+  if(hp_){N.harpoonT-=dt;if(N.harpoonT<=0){
+    let big=null;for(const e of N.enemies)if(e.hp>0&&(!big||e.hp>big.hp))big=e;
+    if(big){N.harpoonT=harpoonIv(hp_);const[hx,hy]=posOf('harpoon');N.lines.push({x1:hx,y1:hy-12,x2:big.x,y2:big.y,life:.18});
+      big.hp-=3*(1+0.35*level('lens'))*(5+3.5*hp_);big.hit=.15;if(big.hp<=0)kill(big);}}}
+  // flare tower
+  const fl=level('flare');
+  if(fl){N.flareT-=dt;if(N.flareT<=0){
+    const far=N.enemies.filter(e=>e.hp>0&&Math.hypot(e.x,e.y)>40);
+    if(far.length){N.flareT=flareIv(fl);const c=far[Math.floor(Math.random()*far.length)];
+      N.rings.push({x:c.x,y:c.y,r:0,life:.7,flare:1});
+      for(const e of N.enemies)if(Math.hypot(e.x-c.x,e.y-c.y)<34+e.r)e.stunT=1.2+0.3*fl;}}}
+  for(const l of N.lines)l.life-=dt;N.lines=N.lines.filter(l=>l.life>0);
   N.enemies=N.enemies.filter(e=>e.hp>0);
   for(const r of N.rings){r.life-=dt;r.r+=dt*(r.boom?80:220);}
   N.rings=N.rings.filter(r=>r.life>0);
-  for(const d of N.drops){d.age+=dt;if(d.age>3){const r=Math.hypot(d.x,d.y);if(r<22)collect(d);else{d.x-=d.x/r*30*dt;d.y-=d.y/r*30*dt;}}}
+  const lb=level('lifeboat');
+  for(const d of N.drops){d.age+=dt;if(lb&&d.age>lifeIv(lb))collect(d);else if(d.age>3){const r=Math.hypot(d.x,d.y);if(r<22)collect(d);else{d.x-=d.x/r*30*dt;d.y-=d.y/r*30*dt;}}}
   N.drops=N.drops.filter(d=>!d.got);
   for(const t of N.texts){t.y-=16*dt;t.life-=dt;}
   N.texts=N.texts.filter(t=>t.life>0);
@@ -256,7 +309,7 @@ function kill(e){
   const o=e.oil*(1+0.2*level('render'));N.oil=Math.min(N.maxOil,N.oil+o);
   if(e.type==='kraken'){text(e.x,e.y,'Kraken driven off!','#c9a0ff',2);
     for(let i=0;i<3;i++)N.drops.push({kind:'gold',x:e.x+(i-1)*14,y:e.y,age:0,val:e.coin*2});}
-  else if(Math.random()<0.08){
+  else if(Math.random()<0.08+0.01*level('lifeboat')){
     const gold=Math.random()<0.55;
     N.drops.push(gold?{kind:'gold',x:e.x,y:e.y,age:0,val:e.coin*5+3*N.n}:{kind:'oil',x:e.x,y:e.y,age:0,val:10+N.maxOil*0.04});
   }
@@ -327,8 +380,11 @@ function draw(){
       const bg=ctx.createRadialGradient(0,0,4,0,0,L.range*1.05);bg.addColorStop(0,`rgba(255,214,120,${k})`);bg.addColorStop(1,'rgba(255,214,120,0)');
       ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,L.range*1.05,N.aim-0.24,N.aim+0.24);ctx.closePath();ctx.fill();
     }
-    for(const r of N.rings){ctx.strokeStyle=r.boom?`rgba(255,160,90,${r.life*2})`:`rgba(159,183,214,${r.life*0.7})`;ctx.lineWidth=r.boom?3:2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
-    for(const e of N.enemies)drawEnemy(e,N.slowT>0);
+    for(const r of N.rings){ctx.strokeStyle=r.flare?`rgba(255,120,80,${r.life})`:r.boom?`rgba(255,160,90,${r.life*2})`:`rgba(159,183,214,${r.life*0.7})`;ctx.lineWidth=r.boom||r.flare?3:2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
+    if(level('tar')){ctx.strokeStyle='rgba(20,16,12,.45)';ctx.lineWidth=40;ctx.beginPath();ctx.arc(0,0,60,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle='rgba(120,100,70,.18)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,40,0,Math.PI*2);ctx.arc(0,0,80,0,Math.PI*2);ctx.stroke();}
+    for(const e of N.enemies){drawEnemy(e,N.slowT>0);if(e.stunT>0){ctx.fillStyle='#ffb27a';for(let k=0;k<3;k++){const a=clockT*6+k*2.1;ctx.beginPath();ctx.arc(e.x+Math.cos(a)*(e.r+3),e.y-e.r-3+Math.sin(a)*2,1.4,0,7);ctx.fill();}}}
+    for(const l of N.lines){ctx.strokeStyle=`rgba(220,235,240,${l.life*5})`;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(l.x1,l.y1);ctx.lineTo(l.x2,l.y2);ctx.stroke();}
     for(const s of N.shots){ctx.fillStyle='#ffc457';ctx.beginPath();ctx.arc(s.x,s.y,2.2,0,7);ctx.fill();}
     for(const d of N.drops){const by=d.y+Math.sin(clockT*3+d.x)*1.5;
       if(d.kind==='gold'){ctx.fillStyle='#8a6a1e';ctx.fillRect(d.x-6,by-3,12,8);ctx.fillStyle='#f0d27a';ctx.fillRect(d.x-6,by-6,12,4);ctx.fillStyle='#fff3c4';ctx.fillRect(d.x-1.2,by-3,2.4,3);}
@@ -336,9 +392,26 @@ function draw(){
       ctx.strokeStyle=`rgba(255,255,255,${0.3+0.25*Math.sin(clockT*5)})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(d.x,by,10,0,7);ctx.stroke();}
     for(const b of N.balls){const h=Math.sin(b.t*Math.PI)*22;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(b.x,b.y,2.5,0,7);ctx.fill();ctx.fillStyle='#2a2a2a';ctx.beginPath();ctx.arc(b.x,b.y-h,3.2,0,7);ctx.fill();}
   }
+  if(save.rig)drawRig();
   drawLighthouse(mode!=='night'||night.oil>0);
   if(mode==='night'){ctx.textAlign='center';ctx.font='600 9px "Chakra Petch",sans-serif';
     for(const t of night.texts){ctx.globalAlpha=Math.min(1,t.life*1.5);ctx.fillStyle=t.c;ctx.fillText(t.s,t.x,t.y);}ctx.globalAlpha=1;}
+}
+function drawRig(){
+  const[x,y]=RIG,nt=mode==='night',chosen=mode==='town'&&sel==='rig';
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(x,y+22,22,6,0,0,7);ctx.fill();
+  ctx.strokeStyle=nt?'#5a6266':'#8a9599';ctx.lineWidth=2.2;
+  for(const dx of[-14,-5,5,14]){ctx.beginPath();ctx.moveTo(x+dx,y);ctx.lineTo(x+dx*1.15,y+22);ctx.stroke();}
+  ctx.fillStyle=nt?'#4f585c':'#b9c1c0';ctx.fillRect(x-18,y-4,36,8);
+  ctx.fillStyle=nt?'#3c4448':'#d9d3c3';ctx.fillRect(x-14,y-10,12,6);
+  ctx.strokeStyle=nt?'#7b6a46':'#c9a46a';ctx.lineWidth=1.3;ctx.beginPath();
+  ctx.moveTo(x+2,y-4);ctx.lineTo(x+8,y-38);ctx.lineTo(x+14,y-4);ctx.moveTo(x+4,y-14);ctx.lineTo(x+12,y-14);ctx.moveTo(x+5,y-24);ctx.lineTo(x+11,y-24);
+  ctx.moveTo(x+3,y-8);ctx.lineTo(x+12,y-20);ctx.moveTo(x+13,y-8);ctx.lineTo(x+4,y-20);ctx.stroke();
+  const blink=Math.sin(clockT*4)>0;
+  ctx.fillStyle=blink?'#ff5a4a':'#5a2a26';ctx.beginPath();ctx.arc(x+8,y-39,2,0,7);ctx.fill();
+  if(save.research){ctx.fillStyle=`rgba(255,196,87,${0.5+0.5*Math.sin(clockT*6)})`;ctx.beginPath();ctx.arc(x-8,y-12,1.8,0,7);ctx.fill();}
+  if(chosen){ctx.strokeStyle='#ffc457';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(x,y+20,26,9,0,0,7);ctx.stroke();}
+  if(!nt){ctx.fillStyle='rgba(214,233,234,.7)';ctx.font='600 7px "Chakra Petch",sans-serif';ctx.textAlign='center';ctx.fillText('Rig '+save.rig,x,y+34);}
 }
 function drawLighthouse(lit){
   ctx.fillStyle='#4a5458';ctx.beginPath();ctx.ellipse(0,4,24,14,0,0,7);ctx.fill();
@@ -388,6 +461,7 @@ cv.addEventListener('click',ev=>{
   const x=(ev.clientX-r.left-OX)/S,y=(ev.clientY-r.top-OY)/S;
   if(mode==='night'&&night&&!night.over){for(const d of night.drops)if(Math.hypot(d.x-x,d.y-y)<18)collect(d);return;}
   if(mode!=='town')return;
+  if(save.rig&&Math.abs(x-RIG[0])<26&&y>RIG[1]-44&&y<RIG[1]+26){sel='rig';renderPane();return;}
   PLOT_POS.forEach((p,i)=>{if(Math.abs(x-p[0])<20&&Math.abs(y-p[1])<20){sel=i;renderPane();}});
 });
 
@@ -432,12 +506,17 @@ function renderPane(){
   foot.innerHTML=`<button class="btn" id="go" type="button">Light the lamp · Night ${save.night}</button>`;
   $('go').onclick=startNight;
   if(sel===null){
-    pane.innerHTML=`<div class="label">The town · tap a plot</div><div class="plots">${save.plots.map((p,i)=>{
+    const R=save.research,rigTxt=!save.rig?(save.night>=3?'Build it to research new huts':'Unlocks once you reach night 3'):
+      R?`Researching ${B[R.id].n}`:'Idle, ready to research';
+    pane.innerHTML=(rDone?`<div class="banner">Research complete: <b>${B[rDone].n}</b>. Build it on a free plot.</div>`:'')+
+      `<button class="opt" type="button" id="rigCard"><span class="n">Offshore rig${save.rig?' \u00b7 level '+save.rig:''}</span><span class="d">${rigTxt}</span><span class="c" id="rigC">${!save.rig?RIG_COST[0]:R?fmtTime(R.ends-Date.now()):'Open'}</span></button>
+      <div class="label">The town \u00b7 tap a plot</div><div class="plots">${save.plots.map((p,i)=>{
       if(i>=save.unlocked)return `<button class="plot locked" type="button" data-i="${i}"><span class="n">Clear land</span><span class="v">${PLOT_COST[i]} coins</span></button>`;
       if(!p)return `<button class="plot empty" type="button" data-i="${i}"><span class="n">+ Build</span></button>`;
       return `<button class="plot" type="button" data-i="${i}"><span class="n">${B[p.b].n}</span><span class="v">Level ${p.l}</span></button>`;}).join('')}</div>
       <div class="reset" id="reset"><button class="back" type="button" id="resetAsk">Start over</button></div>`;
-    pane.querySelector('.plots').onclick=e=>{const b=e.target.closest('.plot');if(b){sel=+b.dataset.i;renderPane();}};
+    pane.querySelector('.plots').onclick=e=>{const b=e.target.closest('.plot');if(b){rDone=null;sel=+b.dataset.i;renderPane();}};
+    $('rigCard').onclick=()=>{rDone=null;sel='rig';renderPane();};
     $('resetAsk').onclick=()=>{
       $('reset').innerHTML=`<p>Tear down the town, lose your coins and go back to night 1? Best night (${save.best}) is kept.</p>
         <div class="reset-btns"><button class="danger" type="button" id="resetYes">Yes, start over</button><button class="back" type="button" id="resetNo">Keep playing</button></div>`;
@@ -446,6 +525,7 @@ function renderPane(){
     };
     return;
   }
+  if(sel==='rig'){renderRig();return;}
   const i=sel,p=save.plots[i];
   let html=`<button class="back" type="button" id="back">← Town</button>`;
   if(i>=save.unlocked){
@@ -453,8 +533,9 @@ function renderPane(){
     html+=`<div class="label">Overgrown plot</div><div class="opts"><button class="opt" type="button" id="clear" ${ok?'':'disabled'}><span class="n">Clear the land</span><span class="d">${i===save.unlocked?'Makes room for another building':'Clear the plots before this one first'}</span><span class="c">${c}</span></button></div>`;
   }else if(!p){
     const built=new Set(save.plots.filter(Boolean).map(p=>p.b));
-    html+=`<div class="label">Build here</div><div class="opts">${Object.entries(B).filter(([k])=>!built.has(k)).map(([k,b])=>{const c=bcost(k,0);
-      return `<button class="opt" type="button" data-b="${k}" ${save.coins<c?'disabled':''}><span class="n">${b.n}</span><span class="d">${b.d(1)}</span><span class="c">${c}</span></button>`;}).join('')}</div>`;
+    html+=`<div class="label">Build here</div><div class="opts">${Object.entries(B).filter(([k])=>!built.has(k)&&save.researched.includes(k)).map(([k,b])=>{const c=bcost(k,0);
+      return `<button class="opt" type="button" data-b="${k}" ${save.coins<c?'disabled':''}><span class="n">${b.n}</span><span class="d">${b.d(1)}</span><span class="c">${c}</span></button>`;}).join('')}</div>
+      <p class="hint">More huts can be researched at the offshore rig.</p>`;
   }else{
     const b=B[p.b],c=bcost(p.b,p.l);
     html+=`<div class="label">${b.n} · level ${p.l}</div><p style="margin:0;font-size:.82rem;color:var(--muted)">Now: ${b.d(p.l)}</p>
@@ -466,19 +547,51 @@ function renderPane(){
   if($('upg'))$('upg').onclick=()=>{const c=bcost(p.b,p.l);if(save.coins<c)return;save.coins-=c;p.l++;persist();renderAll();};
   pane.querySelectorAll('[data-b]').forEach(o=>o.onclick=()=>{const k=o.dataset.b,c=bcost(k,0);if(save.coins<c)return;save.coins-=c;save.plots[i]={b:k,l:1};persist();renderAll();});
 }
+function renderRig(){
+  const pane=$('pane');let html=`<button class="back" type="button" id="back">← Town</button>`;
+  if(!save.rig){
+    const ok=save.night>=3&&save.coins>=RIG_COST[0];
+    html+=`<div class="label">Offshore rig</div><p class="hint">A tall platform out past the lighthouse, well above the reach of anything in the water. Its engineers research new huts for the town.</p>
+      <div class="opts"><button class="opt" type="button" id="rigUp" ${ok?'':'disabled'}><span class="n">Build the rig</span><span class="d">${save.night>=3?'Unlocks tier 1 research':'Reach night 3 first'}</span><span class="c">${RIG_COST[0]}</span></button></div>`;
+  }else{
+    const R=save.research;
+    html+=`<div class="label">Offshore rig · level ${save.rig}</div>`;
+    if(R){const tot=rTime(R.id),left=R.ends-Date.now();
+      html+=`<div class="rnow"><div class="rrow"><b>${B[R.id].n}</b><span id="rLeft">${fmtTime(left)}</span></div><div class="rbar"><i id="rBar" style="width:${Math.min(100,(1-left/tot)*100)}%"></i></div></div>`;}
+    if(save.rig<RIG_COST.length){const c=RIG_COST[save.rig],nl=save.rig+1;
+      html+=`<div class="opts"><button class="opt" type="button" id="rigUp" ${save.coins<c?'disabled':''}><span class="n">Upgrade rig to level ${nl}</span><span class="d">Research ${15*save.rig}% faster${RIG_TIER(nl)>RIG_TIER(save.rig)?', unlocks tier '+RIG_TIER(nl)+' huts':''}</span><span class="c">${c}</span></button></div>`;}
+    const todo=Object.keys(RESEARCH).filter(k=>!save.researched.includes(k));
+    html+=`<div class="label">${todo.length?'Research':'Everything researched'}</div><div class="opts">${todo.map(k=>{const r=RESEARCH[k],c=R_COST[r.tier],
+      locked=r.tier>RIG_TIER(save.rig),busy=!!R,dis=locked||busy||save.coins<c;
+      return `<button class="opt" type="button" data-r="${k}" ${dis?'disabled':''}><span class="n">${B[k].n} <span class="tier">Tier ${r.tier}</span></span><span class="d">${locked?'Needs rig level '+r.tier:B[k].d(1)+' · '+fmtTime(rTime(k))}</span><span class="c">${c}</span></button>`;}).join('')}</div>`;
+  }
+  pane.innerHTML=html;
+  $('back').onclick=()=>{sel=null;renderPane();};
+  if($('rigUp'))$('rigUp').onclick=()=>{const c=RIG_COST[save.rig];if(save.coins<c)return;save.coins-=c;save.rig++;
+    if(save.research){/* keep the current timer as it was started */}persist();renderAll();};
+  pane.querySelectorAll('[data-r]').forEach(o=>o.onclick=()=>{const k=o.dataset.r,c=R_COST[RESEARCH[k].tier];if(save.research||save.coins<c)return;
+    save.coins-=c;save.research={id:k,ends:Date.now()+rTime(k)};persist();renderAll();});
+}
 function renderAll(){$('pane').innerHTML='';$('bar').innerHTML='';renderBar();renderPane();}
 
 $('begin').onclick=()=>{save.seen=true;persist();$('intro').hidden=true;};
 $('eBtn').onclick=()=>{$('end').hidden=true;mode='town';night=null;sel=null;renderAll();};
 
 // ---------- Loop ----------
-let last=performance.now(),uiT=0;
+let last=performance.now(),uiT=0,townT=0;
+checkResearch();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;clockT+=dt;
   if(mode==='night'&&!night.over&&!document.hidden){
     for(let i=0;i<speed;i++){step(dt);if(night.over)break;}
     uiT+=dt;if(uiT>0.15){uiT=0;renderBar();renderPane();}
   }
+  if(mode==='town'){townT+=dt;if(townT>0.5){townT=0;
+    if(checkResearch())renderAll();
+    else if(save.research){const left=save.research.ends-Date.now();
+      if($('rigC'))$('rigC').textContent=fmtTime(left);
+      if($('rLeft'))$('rLeft').textContent=fmtTime(left);
+      if($('rBar'))$('rBar').style.width=Math.min(100,(1-left/rTime(save.research.id))*100)+'%';}}}
   draw();requestAnimationFrame(frame);
 }
 renderAll();requestAnimationFrame(frame);
