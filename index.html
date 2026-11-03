@@ -117,23 +117,25 @@ try{const s=JSON.parse(localStorage.getItem(KEY));if(s)save=Object.assign(save,s
 while(save.plots.length<9)save.plots.push(null);
 save.unlocked=Math.max(4,save.unlocked);
 const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(save));}catch(e){}};
-const PLOT_COST=[0,0,0,0,80,180,350,650,1100];
+const PLOT_COST=[0,0,0,0,150,400,900,1800,3500];
 
 // ---------- Town buildings ----------
 const B={
-  oil:  {n:'Oil Store',     roof:'#8fd18a',base:30,g:1.55,d:l=>`Oil tank ${100+40*l}`},
-  lens: {n:'Lens Grinder',  roof:'#ffc457',base:35,g:1.6, d:l=>`Lamp damage +${35*l}%`},
-  clock:{n:'Clockmaker',    roof:'#c9a46a',base:40,g:1.6, d:l=>`Beam fire rate +${12*l}%`},
-  mason:{n:'Mason’s Yard',roof:'#b8b2a4',base:30,g:1.55,d:l=>`Lighthouse walls +${40*l}%`},
-  cannon:{n:'Cannon Battery',roof:'#e25d4a',base:60,g:1.65,d:l=>l?`Shot every ${cannonIv(l).toFixed(1)}s, hits hard`:'Fires at the biggest monster'},
-  horn: {n:'Foghorn',       roof:'#9fb7d6',base:55,g:1.65,d:l=>l?`Slows the sea every ${hornIv(l).toFixed(0)}s`:'Blasts to slow all monsters'},
-  fish: {n:'Fishery',       roof:'#6fb6c8',base:45,g:1.6, d:l=>`+${25*l} coins per night survived`},
-  render:{n:'Rendering Hut',roof:'#d68a5c',base:40,g:1.6, d:l=>`Monsters drop +${30*l}% oil`},
-  market:{n:'Market',      roof:'#e8b64c',base:50,g:1.6, d:l=>`All coins earned +${25*l}%`},
+  oil:  {n:'Oil Store',     roof:'#8fd18a',base:45,g:1.75,d:l=>`Oil tank ${100+25*l}`},
+  lens: {n:'Lens Grinder',  roof:'#ffc457',base:50,g:1.8, d:l=>`Lamp damage +${35*l}%`},
+  clock:{n:'Clockmaker',    roof:'#c9a46a',base:55,g:1.8, d:l=>`Beam fire rate +${12*l}%`},
+  mason:{n:'Mason’s Yard',roof:'#b8b2a4',base:45,g:1.75,d:l=>`Lighthouse walls +${40*l}%`},
+  cannon:{n:'Cannon Battery',roof:'#e25d4a',base:90,g:1.85,d:l=>l?`Shot every ${cannonIv(l).toFixed(1)}s, hits hard`:'Fires at the biggest monster'},
+  horn: {n:'Foghorn',       roof:'#9fb7d6',base:80,g:1.85,d:l=>l?`Slows the sea every ${hornIv(l).toFixed(0)}s`:'Blasts to slow all monsters'},
+  fish: {n:'Fishery',       roof:'#6fb6c8',base:70,g:1.8, d:l=>`+${20*l} coins per night survived`},
+  render:{n:'Rendering Hut',roof:'#d68a5c',base:60,g:1.8, d:l=>`Monsters drop +${20*l}% oil`},
+  market:{n:'Market',      roof:'#e8b64c',base:80,g:1.8, d:l=>`All coins earned +${15*l}%`},
+  watch:{n:'Watchtower',   roof:'#7d8fa6',base:70,g:1.8, d:l=>`Lamp reach +${8*l}%`},
+  cottage:{n:'Keeper\u2019s Cottage',roof:'#a8c08a',base:60,g:1.8,d:l=>`Walls repair ${(0.4*l).toFixed(1)} hp/s`},
 };
 const cannonIv=l=>Math.max(1.2,5/(1+0.25*(l-1)));
 const hornIv=l=>Math.max(5,14-l*1.5);
-const coinMult=()=>1+0.25*level('market');
+const coinMult=()=>1+0.15*level('market');
 const level=t=>{const p=save.plots.find(p=>p&&p.b===t);return p?p.l:0;};
 const bcost=(t,l)=>Math.round(B[t].base*Math.pow(B[t].g,l)); // l = current level (0 = build)
 
@@ -141,7 +143,7 @@ const bcost=(t,l)=>Math.round(B[t].base*Math.pow(B[t].g,l)); // l = current leve
 const MODES={
   dim:   {n:'Dim',   burn:0.55,dmg:0.6,range:0.85,rate:0.9, tip:'Sips oil, weak beam'},
   steady:{n:'Steady',burn:1.2, dmg:1,  range:1,   rate:1,   tip:'Balanced'},
-  blaze: {n:'Blaze', burn:2.8, dmg:1.9,range:1.15,rate:1.25,tip:'Burns fast, hits hard'},
+  blaze: {n:'Blaze', burn:3.6, dmg:1.9,range:1.15,rate:1.25,tip:'Burns fast, hits hard'},
 };
 
 // ---------- Night state ----------
@@ -149,28 +151,28 @@ const NIGHT_LEN=100;
 let night=null, mode='town', speed=1, sel=null;
 function startNight(){
   const n=save.night;
-  night={n,t:0,lamp:'steady',oil:0,maxOil:100+40*level('oil'),hp:0,maxHp:30*(1+0.4*level('mason')),
+  night={n,t:0,lamp:'steady',oil:0,maxOil:100+25*level('oil'),hp:0,maxHp:30*(1+0.4*level('mason')),
     enemies:[],shots:[],balls:[],texts:[],rings:[],drops:[],fireT:0,aim:-Math.PI/2,cannonT:2,hornT:hornIv(level('horn')||1),
-    slowT:0,coins:0,kills:0,spawnT:0,spawned:0,total:28+n*7,boss:n%3===0,bossDone:false,over:false};
+    slowT:0,coins:0,kills:0,spawnT:0,spawned:0,total:30+n*8,boss:n%3===0,bossDone:false,over:false};
   night.oil=night.maxOil;night.hp=night.maxHp;
   mode='night';sel=null;renderAll();
 }
 const lampStats=()=>{const m=MODES[night.lamp];return{
-  dmg:3*(1+0.35*level('lens'))*m.dmg, rate:1.2*(1+0.12*level('clock'))*m.rate, range:115*m.range, burn:m.burn};};
+  dmg:3*(1+0.35*level('lens'))*m.dmg, rate:1.2*(1+0.12*level('clock'))*m.rate, range:115*m.range*(1+0.08*level('watch')), burn:m.burn};};
 
 const TYPES={
-  eel:  {hp:4, spd:26,dmg:1.2,coin:2,oil:2.2,r:7},
-  crab: {hp:14,spd:15,dmg:3,  coin:5,oil:4,  r:10},
-  jelly:{hp:3, spd:46,dmg:1,  coin:3,oil:1.5,r:6},
-  kraken:{hp:180,spd:9,dmg:12,coin:120,oil:40,r:22},
+  eel:  {hp:4, spd:26,dmg:1.2,coin:1.5,oil:1.2,r:7},
+  crab: {hp:14,spd:15,dmg:3,  coin:4,  oil:2.5,r:10},
+  jelly:{hp:3, spd:46,dmg:1,  coin:2,  oil:0.8,r:6},
+  kraken:{hp:180,spd:9,dmg:12,coin:100,oil:30,r:22},
 };
 let W=0,H=0,S=1,OX=0,OY=0,DPR=1;
 function spawn(type){
   const t=TYPES[type],n=night.n,a=-Math.PI+0.12+Math.random()*(Math.PI-0.24);
   const R=Math.hypot(W,H)/S*0.75;
-  const hp=t.hp*Math.pow(1.28,n-1);
+  const hp=t.hp*Math.pow(1.32,n-1);
   night.enemies.push({type,x:Math.cos(a)*R,y:Math.sin(a)*R,hp,maxHp:hp,spd:t.spd*(1+Math.min(.4,n*0.03)),
-    dmg:t.dmg*Math.pow(1.18,n-1),coin:t.coin*(1+0.15*(n-1)),oil:t.oil,r:t.r,atkT:0,ph:Math.random()*6,hit:0});
+    dmg:t.dmg*Math.pow(1.2,n-1),coin:t.coin*(1+0.12*(n-1)),oil:t.oil,r:t.r,atkT:0,ph:Math.random()*6,hit:0});
 }
 function pick(){const n=night.n,r=Math.random(),p=night.t/NIGHT_LEN;
   if(n>=2&&r<0.18+p*0.1)return 'jelly'; if(n>=1&&r<0.38+p*0.15&&p>0.25)return 'crab'; return 'eel';}
@@ -188,6 +190,8 @@ function step(dt){
     while(N.spawnT>=1&&N.spawned<N.total){N.spawnT--;N.spawned++;spawn(pick());}
   }
   if(N.boss&&!N.bossDone&&N.t>NIGHT_LEN*0.6){N.bossDone=true;spawn('kraken');text(0,-60,'Something big stirs…','#c9a0ff',2.2);}
+  // walls repair
+  N.hp=Math.min(N.maxHp,N.hp+0.4*level('cottage')*dt);
   // oil
   if(N.oil>0){N.oil=Math.max(0,N.oil-L.burn*dt);if(N.oil===0)text(0,-30,'The lamp is dry!','#e25d4a',1.8);}
   const lit=N.oil>0;
@@ -242,12 +246,12 @@ function step(dt){
 function kill(e){
   if(e.dead)return;e.dead=true;const N=night;
   N.coins+=e.coin*coinMult();N.kills++;
-  const o=e.oil*(1+0.3*level('render'));N.oil=Math.min(N.maxOil,N.oil+o);
+  const o=e.oil*(1+0.2*level('render'));N.oil=Math.min(N.maxOil,N.oil+o);
   if(e.type==='kraken'){text(e.x,e.y,'Kraken driven off!','#c9a0ff',2);
     for(let i=0;i<3;i++)N.drops.push({kind:'gold',x:e.x+(i-1)*14,y:e.y,age:0,val:e.coin*2});}
-  else if(Math.random()<0.12){
+  else if(Math.random()<0.08){
     const gold=Math.random()<0.55;
-    N.drops.push(gold?{kind:'gold',x:e.x,y:e.y,age:0,val:e.coin*8+5*N.n}:{kind:'oil',x:e.x,y:e.y,age:0,val:18+N.maxOil*0.08});
+    N.drops.push(gold?{kind:'gold',x:e.x,y:e.y,age:0,val:e.coin*5+3*N.n}:{kind:'oil',x:e.x,y:e.y,age:0,val:10+N.maxOil*0.04});
   }
 }
 function collect(d){
@@ -261,7 +265,7 @@ const cannonPos=()=>posOf('cannon'), hornPos=()=>posOf('horn');
 
 function finish(won){
   const N=night;if(N.over)return;N.over=true;
-  const fish=won?Math.round(25*level('fish')*N.n*coinMult()):0, dawn=won?Math.round((30+N.n*15)*coinMult()):0;
+  const fish=won?Math.round(20*level('fish')*N.n*coinMult()):0, dawn=won?Math.round((25+N.n*12)*coinMult()):0;
   let earned=N.coins+fish+dawn; if(!won)earned=Math.floor(earned*0.5);
   save.coins+=earned;
   if(won){save.best=Math.max(save.best,N.n);save.night++;}
