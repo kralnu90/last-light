@@ -2,7 +2,7 @@
 
 A lighthouse keeper's idle defence game for your phone. Keep the lamp burning from dusk till dawn while sea monsters close in, manage your oil so the light doesn't go dark, and spend your takings by day building up the harbour town that keeps you alive.
 
-**Play it:** https://kralnu90.github.io/last-light/
+**Play it:** https://kralnugames.com/last-light/
 
 ## How it plays
 
